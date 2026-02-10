@@ -7,48 +7,43 @@ from mmengine.model import BaseModel
 from torch import nn
 
 try:
-    from transformers import AutoTokenizer, BertConfig
-    from transformers import BertModel as HFBertModel
+    from transformers import AutoConfig, AutoModel, AutoTokenizer
 except ImportError:
+    AutoConfig = None
+    AutoModel = None
     AutoTokenizer = None
-    HFBertModel = None
 
 from mmdet.registry import MODELS
 from .utils import generate_masks_with_special_tokens_and_transfer_map
 
 
 @MODELS.register_module()
-class BertModel(BaseModel):
-    """BERT model for language embedding only encoder.
+class MDebertaModel(BaseModel):
+    """mDeBERTa model for language embedding only encoder.
 
     Args:
-        name (str, optional): name of the pretrained BERT model from
-            HuggingFace. Defaults to bert-base-uncased.
-        max_tokens (int, optional): maximum number of tokens to be
-            used for BERT. Defaults to 256.
+        name (str, optional): name of the pretrained model from HuggingFace.
+            Defaults to microsoft/mdeberta-v3-base.
+        max_tokens (int, optional): maximum number of tokens to be used.
+            Defaults to 256.
         pad_to_max (bool, optional): whether to pad the tokens to max_tokens.
-             Defaults to True.
+            Defaults to True.
         use_sub_sentence_represent (bool, optional): whether to use sub
-            sentence represent introduced in `Grounding DINO
-            <https://arxiv.org/abs/2303.05499>`. Defaults to False.
+            sentence represent introduced in GroundingDINO. Defaults to False.
         special_tokens_list (list, optional): special tokens used to split
-            subsentence. It cannot be None when `use_sub_sentence_represent`
-            is True. Defaults to None.
-        add_pooling_layer (bool, optional): whether to adding pooling
-            layer in bert encoder. Defaults to False.
-        num_layers_of_embedded (int, optional): number of layers of
-            the embedded model. Defaults to 1.
+            subsentence. Required when use_sub_sentence_represent is True.
+        num_layers_of_embedded (int, optional): number of layers of the
+            embedded model. Defaults to 1.
         use_checkpoint (bool, optional): whether to use gradient checkpointing.
-             Defaults to False.
+            Defaults to False.
     """
 
     def __init__(self,
-                 name: str = 'bert-base-uncased',
+                 name: str = 'microsoft/mdeberta-v3-base',
                  max_tokens: int = 256,
                  pad_to_max: bool = True,
                  use_sub_sentence_represent: bool = False,
                  special_tokens_list: list = None,
-                 add_pooling_layer: bool = False,
                  num_layers_of_embedded: int = 1,
                  use_checkpoint: bool = False,
                  **kwargs) -> None:
@@ -65,9 +60,8 @@ class BertModel(BaseModel):
         self.tokenizer = AutoTokenizer.from_pretrained(name)
         self.language_backbone = nn.Sequential(
             OrderedDict([('body',
-                          BertEncoder(
+                          AutoHFEncoder(
                               name,
-                              add_pooling_layer=add_pooling_layer,
                               num_layers_of_embedded=num_layers_of_embedded,
                               use_checkpoint=use_checkpoint))]))
 
@@ -81,7 +75,6 @@ class BertModel(BaseModel):
                 special_tokens_list)
 
     def forward(self, captions: Sequence[str], **kwargs) -> dict:
-        """Forward function."""
         device = next(self.language_backbone.parameters()).device
         tokenized = self.tokenizer.batch_encode_plus(
             captions,
@@ -91,16 +84,17 @@ class BertModel(BaseModel):
             return_tensors='pt',
             truncation=True).to(device)
         input_ids = tokenized.input_ids
+        token_type_ids = tokenized.get('token_type_ids')
+
         if self.use_sub_sentence_represent:
-            attention_mask, position_ids = \
+            text_self_attention_masks, position_ids = \
                 generate_masks_with_special_tokens_and_transfer_map(
                     tokenized, self.special_tokens)
-            token_type_ids = tokenized['token_type_ids']
-
+            attention_mask = tokenized.attention_mask.bool()
         else:
-            attention_mask = tokenized.attention_mask
+            text_self_attention_masks = None
+            attention_mask = tokenized.attention_mask.bool()
             position_ids = None
-            token_type_ids = None
 
         tokenizer_input = {
             'input_ids': input_ids,
@@ -113,56 +107,47 @@ class BertModel(BaseModel):
             language_dict_features['position_ids'] = position_ids
             language_dict_features[
                 'text_token_mask'] = tokenized.attention_mask.bool()
+            language_dict_features['masks'] = text_self_attention_masks
         return language_dict_features
 
 
-class BertEncoder(nn.Module):
-    """BERT encoder for language embedding.
-
-    Args:
-        name (str): name of the pretrained BERT model from HuggingFace.
-                Defaults to bert-base-uncased.
-        add_pooling_layer (bool): whether to add a pooling layer.
-        num_layers_of_embedded (int): number of layers of the embedded model.
-                Defaults to 1.
-        use_checkpoint (bool): whether to use gradient checkpointing.
-                Defaults to False.
-    """
+class AutoHFEncoder(nn.Module):
+    """AutoModel encoder for language embedding."""
 
     def __init__(self,
                  name: str,
-                 add_pooling_layer: bool = False,
                  num_layers_of_embedded: int = 1,
                  use_checkpoint: bool = False):
         super().__init__()
-        if BertConfig is None:
+        if AutoConfig is None:
             raise RuntimeError(
                 'transformers is not installed, please install it by: '
                 'pip install transformers.')
-        config = BertConfig.from_pretrained(name)
-        config.gradient_checkpointing = use_checkpoint
-        # only encoder
-        self.model = HFBertModel.from_pretrained(
-            name, add_pooling_layer=add_pooling_layer, config=config)
+        config = AutoConfig.from_pretrained(name)
+        if hasattr(config, 'gradient_checkpointing'):
+            config.gradient_checkpointing = use_checkpoint
+        self.model = AutoModel.from_pretrained(
+            name, config=config, use_safetensors=True)
         self.language_dim = config.hidden_size
         self.num_layers_of_embedded = num_layers_of_embedded
 
     def forward(self, x) -> dict:
         mask = x['attention_mask']
 
-        outputs = self.model(
-            input_ids=x['input_ids'],
-            attention_mask=mask,
-            position_ids=x['position_ids'],
-            token_type_ids=x['token_type_ids'],
-            output_hidden_states=True,
-        )
+        inputs = {
+            'input_ids': x['input_ids'],
+            'attention_mask': mask,
+        }
+        if x.get('position_ids') is not None:
+            inputs['position_ids'] = x['position_ids']
+        if x.get('token_type_ids') is not None:
+            inputs['token_type_ids'] = x['token_type_ids']
 
-        # outputs has 13 layers, 1 input layer and 12 hidden layers
+        outputs = self.model(**inputs, output_hidden_states=True)
+
         encoded_layers = outputs.hidden_states[1:]
         features = torch.stack(encoded_layers[-self.num_layers_of_embedded:],
                                1).mean(1)
-        # language embedding has shape [len(phrase), seq_len, language_dim]
         features = features / self.num_layers_of_embedded
         if mask.dim() == 2:
             embedded = features * mask.unsqueeze(-1).float()

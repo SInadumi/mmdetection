@@ -3,11 +3,13 @@ from collections import defaultdict
 from typing import Dict, List, Optional, Sequence
 
 import numpy as np
+import torch
 from mmengine.evaluator import BaseMetric
 from mmengine.logging import MMLogger
 
 from mmdet.registry import METRICS
 from ..functional import bbox_overlaps
+from ...structures.bbox import BaseBoxes
 
 
 class RecallTracker:
@@ -103,7 +105,20 @@ class Flickr30kMetric(BaseMetric):
         """
         for data_sample in data_samples:
             pred = data_sample['pred_instances']
+            if hasattr(pred, 'cpu'):
+                pred = pred.cpu()
+            elif isinstance(pred, dict):
+                pred = {
+                    key: value.cpu() if torch.is_tensor(value) else value
+                    for key, value in pred.items()
+                }
+            else:
+                raise TypeError(
+                    'pred_instances must be a Tensor or a dict of Tensors.')
             gt = data_sample['gt_instances']['bboxes']
+            if isinstance(gt, BaseBoxes):
+                gt = gt.tensor
+            gt = gt.cpu()
             gt_label = data_sample['phrase_ids']
             phrases = data_sample['phrases']
             assert len(gt) == len(gt_label)

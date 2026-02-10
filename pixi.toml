@@ -1,0 +1,48 @@
+[workspace]
+name = "mmdet"
+version = "3.3.0"
+description = "OpenMMLab Detection Toolbox and Benchmark"
+channels = ["pytorch", "nvidia", "openmmlab", "conda-forge"]
+platforms = ["linux-64"]
+
+[dependencies]
+python = "3.9.*"
+pip = "*"
+cython = "*"
+numpy = "*"
+matplotlib = "*"
+pycocotools = "*"
+scipy = "*"
+shapely = "*"
+six = "*"
+terminaltables = "*"
+tqdm = "*"
+emoji = "*"
+scikit-learn = "*"
+Pillow = "*"
+libstdcxx-ng = ">=12"
+libgcc-ng = ">=12"
+jsonlines = ">=4.0.0,<5"
+transformers = ">=4.36,<4.38"
+tiktoken = ">=0.11.0,<0.12"
+sentencepiece = ">=0.2.0,<0.3"
+protobuf = ">=6.31.1,<7"
+dataclasses = ">=0.8,<0.9"
+dataclasses-json = ">=0.6.7,<0.7"
+nltk = ">=3.9.1,<4"
+
+[pypi-dependencies]
+cityscapesscripts = "*"
+imagecorruptions = "*"
+mmengine = ">=0.7.1,<1.0.0"
+fairscale = "*"
+safetensors = "*"
+torch = "==2.1.2"
+torchvision = "==0.16.2"
+torchaudio = "==2.1.2"
+mmcv = { url = "https://download.openmmlab.com/mmcv/dist/cu121/torch2.1.0/mmcv-2.1.0-cp39-cp39-manylinux1_x86_64.whl" }
+mmdet = { path = ".", editable = true }
+rhoknp = ">=1.7.1, <2"
+
+[activation]
+env = { LD_LIBRARY_PATH = "$CONDA_PREFIX/lib:$LD_LIBRARY_PATH" }

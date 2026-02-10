@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=61", "wheel", "torch"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mmdet"
+version = "3.3.0"
+description = "OpenMMLab Detection Toolbox and Benchmark"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "Apache-2.0"}
+authors = [{name = "MMDetection Contributors", email = "openmmlab@gmail.com"}]
+# requirements.txt (build/optional/runtime) + core runtime deps for GPU/CUDA
+dependencies = [
+  "cython",
+  "numpy",
+  "matplotlib",
+  "pycocotools",
+  "scipy",
+  "shapely",
+  "six",
+  "terminaltables",
+  "tqdm",
+  "cityscapesscripts",
+  "emoji",
+  "fairscale",
+  "imagecorruptions",
+  "scikit-learn",
+  "mmcv>=2.0.0rc4,<2.2.0",
+  "mmengine>=0.7.1,<1.0.0",
+  "torch==2.1.2",
+  "torchvision==0.16.2",
+  "torchaudio==2.1.2",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+exclude = ["configs", "tools", "demo"]
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[[tool.uv.index]]
+name = "mmcv-cu121"
+url = "https://download.openmmlab.com/mmcv/dist/cu121/torch2.1/index.html"
+explicit = true
+
+[tool.uv.sources]
+torch = {index = "pytorch-cu121"}
+torchvision = {index = "pytorch-cu121"}
+torchaudio = {index = "pytorch-cu121"}
+mmcv = {index = "mmcv-cu121"}
+
+[tool.uv.extra-build-dependencies]
+mmdet = ["torch"]

@@ -4,6 +4,8 @@ from typing import Dict, List, Optional, Tuple, Union
 import cv2
 import mmcv
 import numpy as np
+import os.path as osp
+import warnings
 
 try:
     import seaborn as sns
@@ -89,7 +91,8 @@ class DetLocalVisualizer(Visualizer):
                                             Tuple[int]]] = (200, 200, 200),
                  mask_color: Optional[Union[str, Tuple[int]]] = None,
                  line_width: Union[int, float] = 3,
-                 alpha: float = 0.8) -> None:
+                 alpha: float = 0.8,
+                 font_path: Optional[str] = None) -> None:
         super().__init__(
             name=name,
             image=image,
@@ -100,6 +103,18 @@ class DetLocalVisualizer(Visualizer):
         self.mask_color = mask_color
         self.line_width = line_width
         self.alpha = alpha
+        self.font_properties = None
+        if font_path:
+            if not osp.exists(font_path):
+                warnings.warn(f'Font path not found: {font_path}')
+            else:
+                try:
+                    from matplotlib import font_manager
+                    font_manager.fontManager.addfont(font_path)
+                    self.font_properties = font_manager.FontProperties(
+                        fname=font_path)
+                except Exception as exc:
+                    warnings.warn(f'Failed to load font: {exc}')
         # Set default value. When calling
         # `DetLocalVisualizer().dataset_meta=xxx`,
         # it will override the default value.
@@ -161,6 +176,7 @@ class DetLocalVisualizer(Visualizer):
                     pos,
                     colors=text_colors[i],
                     font_sizes=int(13 * scales[i]),
+                    font_properties=self.font_properties,
                     bboxes=[{
                         'facecolor': 'black',
                         'alpha': 0.8,
@@ -225,6 +241,7 @@ class DetLocalVisualizer(Visualizer):
                         pos,
                         colors=text_colors[i],
                         font_sizes=int(13 * scales[i]),
+                        font_properties=self.font_properties,
                         horizontal_alignments='center',
                         bboxes=[{
                             'facecolor': 'black',
@@ -233,6 +250,31 @@ class DetLocalVisualizer(Visualizer):
                             'edgecolor': 'none'
                         }])
         return self.get_image()
+
+    def draw_texts(self,
+                   texts,
+                   positions,
+                   font_sizes=None,
+                   colors='g',
+                   vertical_alignments='top',
+                   horizontal_alignments='left',
+                   font_families='sans-serif',
+                   bboxes=None,
+                   font_properties=None):
+        """Draw texts with optional default font_properties."""
+        if font_properties is None:
+            font_properties = self.font_properties
+        return super().draw_texts(
+            texts=texts,
+            positions=positions,
+            font_sizes=font_sizes,
+            colors=colors,
+            vertical_alignments=vertical_alignments,
+            horizontal_alignments=horizontal_alignments,
+            font_families=font_families,
+            bboxes=bboxes,
+            font_properties=font_properties)
+
 
     def _draw_panoptic_seg(self, image: np.ndarray,
                            panoptic_seg: ['PixelData'],
@@ -309,6 +351,7 @@ class DetLocalVisualizer(Visualizer):
                 pos,
                 colors=text_colors[i],
                 font_sizes=int(13 * scales[i]),
+                font_properties=self.font_properties,
                 bboxes=[{
                     'facecolor': 'black',
                     'alpha': 0.8,
@@ -379,6 +422,7 @@ class DetLocalVisualizer(Visualizer):
                     centroids,
                     colors=(255, 255, 255),
                     font_sizes=int(13 * scales),
+                    font_properties=self.font_properties,
                     horizontal_alignments='center',
                     bboxes=[{
                         'facecolor': 'black',
@@ -605,6 +649,7 @@ class TrackLocalVisualizer(Visualizer):
                         pos,
                         colors='black',
                         font_sizes=int(13 * scales[i]),
+                        font_properties=self.font_properties,
                         bboxes=[{
                             'facecolor': [c / 255 for c in colors[i]],
                             'alpha': 0.8,
